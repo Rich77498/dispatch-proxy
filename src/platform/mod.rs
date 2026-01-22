@@ -4,7 +4,7 @@ mod linux;
 #[cfg(not(target_os = "linux"))]
 mod generic;
 
-use crate::load_balancer::LoadBalancerPool;
+use crate::load_balancer::{LoadBalancerPool, TargetAddressType};
 use crate::socks;
 use anyhow::Result;
 use std::sync::Arc;
@@ -21,9 +21,10 @@ use generic::connect_with_interface;
 pub async fn connect_and_relay(
     mut client: TcpStream,
     target_addr: &str,
+    target_type: TargetAddressType,
     pool: Arc<LoadBalancerPool>,
 ) -> Result<()> {
-    let (lb, idx) = pool.get_load_balancer(None);
+    let (lb, idx) = pool.get_load_balancer(None, Some(target_type));
 
     match connect_with_interface(target_addr, &lb).await {
         Ok(mut remote) => {

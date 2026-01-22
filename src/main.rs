@@ -273,8 +273,8 @@ async fn handle_connection(
         }
     } else {
         match socks::handle_socks_handshake(&mut client).await {
-            Ok(target_addr) => {
-                if let Err(e) = platform::connect_and_relay(client, &target_addr, pool).await {
+            Ok((target_addr, target_type)) => {
+                if let Err(e) = platform::connect_and_relay(client, &target_addr, target_type, pool).await {
                     warn!("Connection error: {}", e);
                 }
             }
@@ -295,7 +295,8 @@ async fn handle_tunnel_connection(
     let mut tried = vec![false; pool.len()];
 
     loop {
-        let (lb, idx) = pool.get_load_balancer(Some(&tried));
+        // Tunnel mode doesn't know the target type, use None
+        let (lb, idx) = pool.get_load_balancer(Some(&tried), None);
 
         match TcpStream::connect(&lb.address).await {
             Ok(mut remote) => {

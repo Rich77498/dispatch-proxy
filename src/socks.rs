@@ -2,6 +2,8 @@ use anyhow::{bail, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+pub use crate::load_balancer::TargetAddressType;
+
 // SOCKS5 Constants
 
 // Auth methods
@@ -83,8 +85,8 @@ async fn servers_choice(conn: &mut TcpStream) -> Result<()> {
     Ok(())
 }
 
-/// Parse client connection request and return target address
-async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
+/// Parse client connection request and return target address with its type
+async fn client_connection_request(conn: &mut TcpStream) -> Result<(String, TargetAddressType)> {
     let mut header = [0u8; 4];
     conn.read_exact(&mut header).await.map_err(|_| {
         anyhow::anyhow!("Failed to read connection request header")
@@ -105,7 +107,7 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
         bail!("Unsupported command code");
     }
 
-    let address = match address_type {
+    let (address, target_type) = match address_type {
         IPV4 => {
             let mut ipv4_addr = [0u8; 4];
             let mut port_bytes = [0u8; 2];
@@ -119,10 +121,10 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
             })?;
 
             let port = u16::from_be_bytes(port_bytes);
-            format!(
+            (format!(
                 "{}.{}.{}.{}:{}",
                 ipv4_addr[0], ipv4_addr[1], ipv4_addr[2], ipv4_addr[3], port
-            )
+            ), TargetAddressType::IPv4)
         }
         DOMAIN => {
             let mut domain_len = [0u8; 1];
@@ -142,7 +144,7 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
 
             let port = u16::from_be_bytes(port_bytes);
             let domain_str = String::from_utf8_lossy(&domain);
-            format!("{}:{}", domain_str, port)
+            (format!("{}:{}", domain_str, port), TargetAddressType::Domain)
         }
         IPV6 => {
             let mut ipv6_addr = [0u8; 16];
@@ -158,7 +160,7 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
 
             let port = u16::from_be_bytes(port_bytes);
             let addr = std::net::Ipv6Addr::from(ipv6_addr);
-            format!("[{}]:{}", addr, port)
+            (format!("[{}]:{}", addr, port), TargetAddressType::IPv6)
         }
         _ => {
             send_error_response(conn, ADDRTYPE_NOT_SUPPORTED).await?;
@@ -166,11 +168,11 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
         }
     };
 
-    Ok(address)
+    Ok((address, target_type))
 }
 
-/// Handle complete SOCKS5 handshake and return target address
-pub async fn handle_socks_handshake(conn: &mut TcpStream) -> Result<String> {
+/// Handle complete SOCKS5 handshake and return target address with its type
+pub async fn handle_socks_handshake(conn: &mut TcpStream) -> Result<(String, TargetAddressType)> {
     // Client greeting
     let (version, _auth_methods) = client_greeting(conn).await?;
     if version != 5 {
@@ -181,7 +183,7 @@ pub async fn handle_socks_handshake(conn: &mut TcpStream) -> Result<String> {
     servers_choice(conn).await?;
 
     // Client connection request
-    let address = client_connection_request(conn).await?;
+    let (address, target_type) = client_connection_request(conn).await?;
 
-    Ok(address)
+    Ok((address, target_type))
 }
