@@ -1,0 +1,24 @@
+[package]
+name = "dispatch-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "A SOCKS5 load balancing proxy that combines multiple internet connections"
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+thiserror = "1"
+socket2 = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+get_if_addrs = "0.5"
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.27", features = ["net"] }
+
+[profile.release]
+lto = true
+strip = true
