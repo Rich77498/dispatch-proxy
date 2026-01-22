@@ -15,21 +15,24 @@ pub async fn connect_with_interface(
     target_addr: &str,
     lb: &LoadBalancer,
 ) -> Result<TcpStream> {
+    let domain = if lb.is_ipv6 { Domain::IPV6 } else { Domain::IPV4 };
+
     // Parse local address (the load balancer's IP with port 0)
     let local_addr: SocketAddr = lb
         .address
         .to_socket_addrs()?
-        .find(|a| a.is_ipv4())
+        .find(|a| if lb.is_ipv6 { a.is_ipv6() } else { a.is_ipv4() })
         .ok_or_else(|| anyhow::anyhow!("Could not resolve local address"))?;
 
-    // Parse target address
+    // Parse target address - prefer matching IP version, fallback to any
     let target: SocketAddr = target_addr
         .to_socket_addrs()?
-        .find(|a| a.is_ipv4())
+        .find(|a| if lb.is_ipv6 { a.is_ipv6() } else { a.is_ipv4() })
+        .or_else(|| target_addr.to_socket_addrs().ok()?.next())
         .ok_or_else(|| anyhow::anyhow!("Could not resolve target address"))?;
 
     // Create socket
-    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
     socket.set_reuse_address(true)?;
 
     // Bind to interface using SO_BINDTODEVICE if interface name is provided

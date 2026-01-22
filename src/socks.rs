@@ -144,6 +144,22 @@ async fn client_connection_request(conn: &mut TcpStream) -> Result<String> {
             let domain_str = String::from_utf8_lossy(&domain);
             format!("{}:{}", domain_str, port)
         }
+        IPV6 => {
+            let mut ipv6_addr = [0u8; 16];
+            let mut port_bytes = [0u8; 2];
+
+            conn.read_exact(&mut ipv6_addr).await.map_err(|_| {
+                anyhow::anyhow!("Failed to read IPv6 address")
+            })?;
+
+            conn.read_exact(&mut port_bytes).await.map_err(|_| {
+                anyhow::anyhow!("Failed to read port")
+            })?;
+
+            let port = u16::from_be_bytes(port_bytes);
+            let addr = std::net::Ipv6Addr::from(ipv6_addr);
+            format!("[{}]:{}", addr, port)
+        }
         _ => {
             send_error_response(conn, ADDRTYPE_NOT_SUPPORTED).await?;
             bail!("Unsupported address type");

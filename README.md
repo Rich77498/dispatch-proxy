@@ -4,9 +4,13 @@ A SOCKS5 load balancing proxy to combine multiple internet connections into one.
 
 It can also be used as a transparent proxy to load balance multiple SSH tunnels.
 
-## Rationale
+## Features
 
-The idea for this project came from [dispatch-proxy](https://github.com/Morhaus/dispatch-proxy) which is written in NodeJS. This Rust implementation provides a single portable binary with excellent performance and low resource usage.
+- **IPv4 and IPv6 support** - Works with both address families
+- **Auto-detection** - Automatically detect interfaces with working internet connectivity
+- **Weighted load balancing** - Configurable contention ratios for each interface
+- **Tunnel mode** - Load balance SSH tunnels or other SOCKS proxies
+- **Cross-platform** - Works on Windows, Linux, and macOS
 
 ## Installation
 
@@ -28,80 +32,66 @@ Download the latest binary for your platform from [releases](https://github.com/
 
 ## Usage
 
-### 1 - Load balance connections
+### 1 - Auto-detect mode (easiest)
 
-The primary purpose of the tool is to combine multiple internet connections into one. For this we need to know the IP addresses of the interfaces we wish to combine. You can obtain the IP addresses using `ipconfig` (Windows), `ip a` (Linux), or `ifconfig` (macOS). Alternatively run `dispatch-proxy --list`.
+The simplest way to use dispatch-proxy is with auto-detection. It will automatically find all interfaces with working internet connectivity:
+
+```
+$ ./dispatch-proxy --auto
+ INFO Auto-detecting interfaces with internet connectivity...
+ INFO Load balancer 1: 192.168.1.2 (en0), contention ratio: 1
+ INFO Load balancer 2: 10.81.201.18 (en1), contention ratio: 1
+ INFO Local server started on 127.0.0.1:8080
+```
+
+### 2 - Manual interface selection
+
+For more control, you can manually specify which interfaces to use. First, list available interfaces:
 
 ```
 $ ./dispatch-proxy --list
 --- Listing the available addresses for dispatching
 [+] en0, IPv4:192.168.1.2
+[+] en0, IPv6:fe80::1
 [+] en1, IPv4:10.81.201.18
 ```
 
-Start `dispatch-proxy` specifying the IP addresses of the load balancers. Optionally, along with the IP address you may also provide the contention ratio (after the @ symbol). If no contention ratio is specified, it defaults to 1.
-
-### 2 - Load balance SSH tunnels
-
-The tool can load balance multiple SSH tunnels. See Example 3 for usage.
-
-### Example 1
-
-SOCKS proxy running on localhost at default port. Contention ratio is specified.
+Then start the proxy with the desired interfaces:
 
 ```
-$ ./dispatch-proxy 10.81.201.18@3 192.168.1.2@2
- INFO Load balancer 1: 10.81.201.18, contention ratio: 3
- INFO Load balancer 2: 192.168.1.2, contention ratio: 2
+$ ./dispatch-proxy 192.168.1.2@3 10.81.201.18@2
+ INFO Load balancer 1: 192.168.1.2, contention ratio: 3
+ INFO Load balancer 2: 10.81.201.18, contention ratio: 2
  INFO Local server started on 127.0.0.1:8080
 ```
 
-Out of 5 consecutive connections, the first 3 are routed to `10.81.201.18` and the remaining 2 to `192.168.1.2`.
+The contention ratio (after @) determines how connections are distributed. In the example above, out of 5 consecutive connections, 3 go to the first interface and 2 to the second.
 
-### Example 2
+### 3 - IPv6 addresses
 
-SOCKS proxy running on a different interface at a custom port. Contention ratio is not specified.
-
-```
-$ ./dispatch-proxy --lhost 192.168.1.2 --lport 5566 10.81.177.215 192.168.1.100
- INFO Load balancer 1: 10.81.177.215, contention ratio: 1
- INFO Load balancer 2: 192.168.1.100, contention ratio: 1
- INFO Local server started on 192.168.1.2:5566
-```
-
-The SOCKS server is started by default on `127.0.0.1:8080`. It can be changed using the `--lhost` and `--lport` options.
-
-Now change the proxy settings of your browser, download manager etc to point to the above address (eg `127.0.0.1:8080`). Be sure to add this as a **SOCKS v5 proxy** and NOT as a HTTP/S proxy.
-
-### Example 3
-
-The tool can be used to load balance multiple SSH tunnels. In this mode, dispatch-proxy acts as a transparent load balancing proxy.
-
-First, setup the tunnels:
+IPv6 addresses are supported. Use bracket notation:
 
 ```
-$ ssh -D 127.0.0.1:7777 user@192.168.1.100
-$ ssh -D 127.0.0.1:7778 user@192.168.1.101
+$ ./dispatch-proxy [fe80::1]@2 [2001:db8::1]@1
 ```
 
-Here we are setting up two SSH tunnels to remote hosts `192.168.1.100` and `192.168.1.101` on local ports `7777` and `7778` respectively.
+### 4 - Tunnel mode (SSH load balancing)
 
-Next, launch dispatch-proxy using the `--tunnel` argument:
+Load balance multiple SSH tunnels:
 
 ```
+# First, setup SSH tunnels
+$ ssh -D 127.0.0.1:7777 user@server1.com
+$ ssh -D 127.0.0.1:7778 user@server2.com
+
+# Then start dispatch-proxy in tunnel mode
 $ ./dispatch-proxy --tunnel 127.0.0.1:7777 127.0.0.1:7778
 ```
 
-Both the IP and port must be mentioned while specifying the load balancer addresses. Domain names also work:
+For IPv6 tunnels:
 
 ```
-$ ./dispatch-proxy --tunnel proxy1.com:7777 proxy2.com:7778
-```
-
-Optionally, the listening host, port and contention ratio can also be specified:
-
-```
-$ ./dispatch-proxy --lport 5555 --tunnel 127.0.0.1:7777@1 127.0.0.1:7778@3
+$ ./dispatch-proxy --tunnel [::1]:7777@2 [::1]:7778@1
 ```
 
 ## Command Line Options
@@ -118,8 +108,18 @@ Options:
   -l, --list           Shows the available addresses for dispatching
   -t, --tunnel         Use tunnelling mode (transparent load balancing proxy)
   -q, --quiet          Disable logs
+  -a, --auto           Auto-detect interfaces with working internet connectivity
   -h, --help           Print help
 ```
+
+## How Auto-Detection Works
+
+When using `--auto`, dispatch-proxy:
+
+1. Enumerates all non-loopback network interfaces
+2. Tests each interface by attempting to connect to Cloudflare DNS (1.1.1.1 for IPv4, 2606:4700:4700::1111 for IPv6)
+3. Interfaces that successfully connect within 3 seconds are used as load balancers
+4. All detected interfaces get a default contention ratio of 1
 
 ## Linux Support
 
@@ -136,7 +136,7 @@ $ sudo setcap cap_net_raw=eip ./dispatch-proxy
 $ ./dispatch-proxy
 ```
 
-Tunnel mode doesn't require root privilege.
+Tunnel mode and auto-detection don't require root privilege.
 
 ## Cross-Compilation
 

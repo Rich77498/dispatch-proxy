@@ -6,14 +6,16 @@ pub struct LoadBalancer {
     pub address: String,
     pub iface: Option<String>,
     pub contention_ratio: u32,
+    pub is_ipv6: bool,
 }
 
 impl LoadBalancer {
-    pub fn new(address: String, iface: Option<String>, contention_ratio: u32) -> Self {
+    pub fn new(address: String, iface: Option<String>, contention_ratio: u32, is_ipv6: bool) -> Self {
         Self {
             address,
             iface,
             contention_ratio,
+            is_ipv6,
         }
     }
 }
