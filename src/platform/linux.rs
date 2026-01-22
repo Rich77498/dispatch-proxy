@@ -6,7 +6,7 @@ use anyhow::Result;
 use nix::sys::socket::{setsockopt, sockopt::BindToDevice};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::os::unix::io::AsRawFd;
+use std::os::fd::AsFd;
 use tokio::net::TcpStream;
 use tracing::warn;
 
@@ -39,8 +39,7 @@ pub async fn connect_with_interface(
     // NOTE: Requires root or CAP_NET_RAW capability
     // sudo setcap cap_net_raw=eip ./dispatch-proxy
     if let Some(ref iface) = lb.iface {
-        let fd = socket.as_raw_fd();
-        if let Err(e) = setsockopt(fd, BindToDevice, &std::ffi::OsString::from(iface)) {
+        if let Err(e) = setsockopt(&socket.as_fd(), BindToDevice, &std::ffi::OsString::from(iface)) {
             warn!("Couldn't bind to interface {}: {}", iface, e);
         }
     }
