@@ -151,6 +151,12 @@ cargo build --release --target x86_64-pc-windows-gnu
 cargo build --release --target aarch64-apple-darwin
 ```
 
+## Connecting to the Proxy
+
+To route your device's traffic through dispatch-proxy, you need a SOCKS5 client. [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid) is recommended as it supports SOCKS5 with UDP ASSOCIATE, allowing both TCP and UDP traffic (including DNS and QUIC) to be load balanced.
+
+Configure your SOCKS5 client to connect to `127.0.0.1:8080` (or whatever `--lhost` and `--lport` you specified).
+
 ## Credits
 
 - [dispatch-proxy](https://github.com/Morhaus/dispatch-proxy): The original SOCKS5/HTTP load balancing proxy written in NodeJS.
