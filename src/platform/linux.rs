@@ -70,3 +70,28 @@ pub async fn connect_with_interface(
 
     Ok(stream)
 }
+
+/// Create a UDP socket bound to the load balancer's interface using SO_BINDTODEVICE
+pub fn bind_udp_to_interface(lb: &LoadBalancer) -> Result<std::net::UdpSocket> {
+    let domain = if lb.is_ipv6 { Domain::IPV6 } else { Domain::IPV4 };
+
+    let local_addr: SocketAddr = lb
+        .address
+        .to_socket_addrs()?
+        .find(|a| if lb.is_ipv6 { a.is_ipv6() } else { a.is_ipv4() })
+        .ok_or_else(|| anyhow::anyhow!("Could not resolve local address"))?;
+
+    let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))?;
+    socket.set_reuse_address(true)?;
+
+    if let Some(ref iface) = lb.iface {
+        if let Err(e) = setsockopt(&socket.as_fd(), BindToDevice, &std::ffi::OsString::from(iface)) {
+            warn!("Couldn't bind UDP to interface {}: {}", iface, e);
+        }
+    }
+
+    socket.bind(&local_addr.into())?;
+    socket.set_nonblocking(true)?;
+
+    Ok(socket.into())
+}

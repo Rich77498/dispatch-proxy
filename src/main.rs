@@ -266,6 +266,7 @@ async fn handle_connection(
     mut client: tokio::net::TcpStream,
     pool: Arc<LoadBalancerPool>,
     tunnel: bool,
+    listen_ip: IpAddr,
 ) {
     if tunnel {
         if let Err(e) = handle_tunnel_connection(client, pool).await {
@@ -273,9 +274,14 @@ async fn handle_connection(
         }
     } else {
         match socks::handle_socks_handshake(&mut client).await {
-            Ok((target_addr, target_type)) => {
+            Ok(socks::SocksCommand::Connect(target_addr, target_type)) => {
                 if let Err(e) = platform::connect_and_relay(client, &target_addr, target_type, pool).await {
                     warn!("Connection error: {}", e);
+                }
+            }
+            Ok(socks::SocksCommand::UdpAssociate(_client_addr)) => {
+                if let Err(e) = platform::udp_associate_and_relay(client, listen_ip, pool).await {
+                    warn!("UDP ASSOCIATE error: {}", e);
                 }
             }
             Err(e) => {
@@ -381,6 +387,7 @@ async fn main() -> Result<()> {
     let pool = Arc::new(LoadBalancerPool::new(load_balancers));
 
     // Start server
+    let listen_ip: IpAddr = args.lhost.parse()?;
     let bind_addr = format!("{}:{}", args.lhost, args.lport);
     let listener = TcpListener::bind(&bind_addr).await?;
     info!("Local server started on {}", bind_addr);
@@ -391,7 +398,7 @@ async fn main() -> Result<()> {
                 let pool = Arc::clone(&pool);
                 let tunnel = args.tunnel;
                 tokio::spawn(async move {
-                    handle_connection(socket, pool, tunnel).await;
+                    handle_connection(socket, pool, tunnel, listen_ip).await;
                 });
             }
             Err(e) => {
