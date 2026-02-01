@@ -83,6 +83,8 @@ pub fn bind_udp_to_interface(lb: &LoadBalancer) -> Result<std::net::UdpSocket> {
 
     let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))?;
     socket.set_reuse_address(true)?;
+    let _ = socket.set_recv_buffer_size(2 * 1024 * 1024);
+    let _ = socket.set_send_buffer_size(2 * 1024 * 1024);
 
     if let Some(ref iface) = lb.iface {
         if let Err(e) = setsockopt(&socket.as_fd(), BindToDevice, &std::ffi::OsString::from(iface)) {
